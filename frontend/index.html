@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Supervisório - Parque de Computadores</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <!-- Header -->
+        <header class="app-header">
+        <div class="header-top">
+            <div class="brand">
+            <i class="fas fa-desktop brand-icon"></i>
+            <div class="brand-text">
+                <h1>Supervisório - Parque de Computadores</h1>
+                <p>Monitoramento em tempo real via Zabbix</p>
+            </div>
+            </div>
+
+            <div class="header-actions">
+            <input id="searchInput" class="search-input" type="text" placeholder="Buscar host...">
+            <select id="sortSelect" class="sort-select">
+                <option value="">Classificar por…</option>
+                <option value="nameAsc">Nome (A–Z)</option>
+                <option value="nameDesc">Nome (Z–A)</option>
+                <option value="cpu">Maior CPU</option>
+                <option value="ram">Maior RAM</option>
+                <option value="ping">Maior Ping</option>
+                <option value="ping">Status Agente</option>
+            </select>
+            </div>
+        </div>
+
+        <div class="header-bottom">
+            <div id="blockFilter" class="tabs"></div>
+        </div>
+        </header>
+
+        </div>
+        <!-- Estatísticas dos Blocos -->
+        <div id="blockStats" class="block-stats">
+            <!-- Preenchido dinamicamente via JavaScript -->
+        </div>
+
+        <!-- Filtro de Blocos -->
+        <div id="blockFilter" class="block-filter">
+            <!-- Preenchido dinamicamente via JavaScript -->
+        </div>
+
+        <!-- Grid de Computadores -->
+        <div id="computersGrid" class="computers-grid">
+            <!-- Preenchido dinamicamente via JavaScript -->
+        </div>
+    </div>
+
+    <!-- Modal de Loading -->
+    <div id="loadingModal" class="modal">
+        <div class="modal-content">
+            <div class="spinner"></div>
+            <p>Carregando dados...</p>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js"></script>
+</body>
+</html>

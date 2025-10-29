@@ -1,0 +1,265 @@
+// js/ui.js
+import { formatPing, formatBytes, formatUptime, formatMbps, getUsageClass, getCategory, shouldShowAgentBadge } from './utils.js';
+// ADICIONE AS NOVAS FUNÇÕES AO IMPORT
+import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory } from './api.js';
+
+// ... (cole aqui suas funções renderBlockFilter, renderComputers, applySort, createGroupHTML, e createComputerCard) ...
+
+// =======================================================
+// RENDERIZAÇÃO PRINCIPAL
+// =======================================================
+
+export function renderBlockFilter(computers, selectedBlock) {
+  const filterContainer = document.getElementById('blockFilter');
+  if (!filterContainer) return;
+
+  const uniqueGroups = [...new Set(computers.map(pc => pc.group).filter(Boolean))];
+
+  filterContainer.innerHTML = `
+    <button class="filter-btn ${selectedBlock === 'all' ? 'active' : ''}" onclick="selectBlock('all')">Todos</button>
+    ${uniqueGroups.sort().map(group => `
+      <button class="filter-btn ${group === selectedBlock ? 'active' : ''}" onclick="selectBlock('${group}')">${group}</button>
+    `).join('')}
+    <button class="filter-btn ${selectedBlock === 'highPing' ? 'active' : ''}" onclick="selectBlock('highPing')">Ping alto</button>
+    <button class="filter-btn ${selectedBlock === 'agentOff' ? 'active' : ''}" onclick="selectBlock('agentOff')">Agente OFF</button>
+  `;
+}
+
+export function renderComputers(computers, state) {
+  const grid = document.getElementById('computersGrid');
+  if (!grid) return;
+
+  let filtered = [...computers];
+
+  // Filtros
+  if (state.selectedBlock === 'highPing') {
+    filtered = filtered.filter(pc => (pc.ping ?? 0) > 100);
+  } else if (state.selectedBlock === 'agentOff') {
+    filtered = filtered.filter(pc => pc.agentStatus === 'offline' || pc.agentStatus === 0);
+  } else if (state.selectedBlock !== 'all' && state.selectedBlock) {
+    filtered = filtered.filter(pc => pc.group === state.selectedBlock);
+  }
+
+  // Busca
+  if (state.searchTerm.trim() !== '') {
+    filtered = filtered.filter(pc =>
+      pc.name?.toLowerCase().includes(state.searchTerm) ||
+      pc.group?.toLowerCase().includes(state.searchTerm) ||
+      pc.ip?.includes(state.searchTerm)
+    );
+  }
+
+  // Ordenação
+  applySort(filtered, state.currentSort);
+
+  // Agrupamento
+  const grouped = filtered.reduce((acc, pc) => {
+    const groupName = pc.group || 'Sem Grupo';
+    if (!acc[groupName]) acc[groupName] = [];
+    acc[groupName].push(pc);
+    return acc;
+  }, {});
+
+  if (Object.keys(grouped).length === 0) {
+    grid.innerHTML = `<p class="no-results">Nenhum equipamento encontrado.</p>`;
+    return;
+  }
+
+  grid.innerHTML = Object.keys(grouped)
+    .sort((a, b) => a.localeCompare(b))
+    .map(groupName => createGroupHTML(groupName, grouped[groupName], state.pingResults, state.computers))
+    .join('');
+}
+
+// =======================================================
+// FUNÇÕES AUXILIARES DE GERAÇÃO DE HTML (não exportadas)
+// =======================================================
+
+function applySort(list, criteria) {
+  if (!criteria) return list;
+  switch (criteria) {
+    case 'nameAsc': list.sort((a, b) => a.name.localeCompare(b.name)); break;
+    case 'nameDesc': list.sort((a, b) => b.name.localeCompare(a.name)); break;
+    case 'cpu': list.sort((a, b) => (b.cpu ?? 0) - (a.cpu ?? 0)); break;
+    case 'ram': list.sort((a, b) => (b.ram ?? 0) - (a.ram ?? 0)); break;
+    case 'ping': list.sort((a, b) => (b.ping ?? 0) - (a.ping ?? 0)); break;
+  }
+}
+
+function createGroupHTML(group, list, pingResults, allComputers) {
+  return `
+    <div class="computer-group">
+      <div class="group-header"><h2>${group} (${list.length})</h2></div>
+      <div class="group-grid">${list.map(pc => createComputerCard(pc, pingResults, allComputers)).join('')}</div>
+    </div>`;
+}
+
+function createComputerCard(pc, pingResults) {
+    const cat = getCategory(pc);
+    const ping = pingResults[pc.id] || { status: null, time: null };
+    const { pingText, pingClass } = formatPing(ping);
+
+    const pingBadge = pc.pingAlive ? `<span class="status-badge online">ONLINE</span>` : `<span class="status-badge offline">OFFLINE</span>`;
+    const agentBadge = (shouldShowAgentBadge(pc) && pc.agentStatus) ? (pc.agentStatus === 'online' ? `<span class="status-badge agent-online">AGENTE ON</span>` : pc.agentStatus === 'offline' ? `<span class="status-badge agent-offline">AGENTE OFF</span>` : '') : '';
+
+    return `
+        <div class="computer-card" data-cat="${cat}" onclick="toggleExpand(${pc.id}, this)">
+            <div class="card-header">
+                <h3>${pc.name}</h3>
+                <div class="status-area">${pingBadge}${agentBadge}</div>
+            </div>
+            <div class="metrics">
+                ${cat === 'computer' ? `
+                    <div class="metric"><div class="metric-header"><span class="metric-label">CPU</span><span class="metric-value">${pc.cpu?.toFixed(1) ?? 0}%</span></div><div class="progress-bar"><div class="progress-fill ${getUsageClass(pc.cpu)}" style="width:${pc.cpu ?? 0}%"></div></div></div>
+                    <div class="metric"><div class="metric-header"><span class="metric-label">RAM</span><span class="metric-value">${pc.ram?.toFixed(1) ?? 0}%</span></div><div class="progress-bar"><div class="progress-fill ${getUsageClass(pc.ram)}" style="width:${pc.ram ?? 0}%"></div></div></div>` : ''}
+                ${cat === 'network' ? `<div class="metric metric-net"><span class="metric-label">Tráfego</span><div class="net-pair"><span class="metric-value net-val"><i class="fas fa-arrow-down"></i> ${pc.netRx ? formatMbps(pc.netRx) : '—'}</span><span class="metric-value net-val up"><i class="fas fa-arrow-up"></i> ${pc.netTx ? formatMbps(pc.netTx) : '—'}</span></div></div>` : ''}
+                ${cat === 'camera' ? `<div class="metric"><span class="metric-label">Perda</span><span class="metric-value">${pc.pingLoss?.toFixed(2) ?? '—'}%</span></div>` : ''}
+                ${pc.ink && Object.values(pc.ink).some(v => v !== null) ? (() => { // Condição melhorada
+                    const renderInkTank = (color, level) => {
+                        if (level === null || level === undefined) return ''; // Não renderiza o tanque se o nível for nulo
+                        const value = Math.max(0, Math.min(100, level));
+                        return `<div class="ink-tank" title="${value.toFixed(0)}%"><div class="ink-fill" style="height:${value}%; background-color:${color};"></div></div>`;
+                    };
+
+                    const inkTanks = [
+                        renderInkTank('#000', pc.ink.black),
+                        renderInkTank('#00bcd4', pc.ink.cyan),
+                        renderInkTank('#e91e63', pc.ink.magenta),
+                        renderInkTank('#facc15', pc.ink.yellow)
+                    ].filter(Boolean).join(''); // Filtra os tanques vazios
+
+                    const isMonochrome = inkTanks.includes('background-color:#000') && !inkTanks.includes('cyan') && !inkTanks.includes('magenta') && !inkTanks.includes('yellow');
+                    const lowInk = Object.values(pc.ink).some(v => v !== null && v < 15);
+                    const inkBadge = lowInk ? `<span class="status-badge ink-low">TINTA BAIXA</span>` : '';
+                    
+                    return `<div class="metric ink-levels ${isMonochrome ? 'single-ink' : ''}">${inkBadge}${inkTanks}</div>`;
+                })() : ''}
+            </div>
+            <div class="card-footer">
+                <span class="ping-label">Ping:</span>
+                <span class="ping-chip ${pingClass}">${pingText}</span>
+            </div>
+        </div>`;
+}
+// =======================================================
+// POP-IN E GRÁFICO (SEÇÃO COMPLETAMENTE REFEITA)
+// =======================================================
+
+/**
+ * Função auxiliar para criar um gráfico de histórico.
+ */
+function createHistoryChart(container, canvasId, title, chartLabel, data, yAxisCallback, borderColor) {
+    if (!data || !Array.isArray(data) || data.length === 0) {
+        container.insertAdjacentHTML('beforeend', `<div class="chart-container"><p>${title}: Sem dados de histórico disponíveis.</p></div>`);
+        return;
+    }
+
+    container.insertAdjacentHTML('beforeend', `<div class="chart-container"><h4>${title}</h4><canvas id="${canvasId}" height="130"></canvas></div>`);
+    const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+    const values = data.map(d => Number(d.value) || 0);
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: chartLabel, data: values,
+                borderColor: borderColor, backgroundColor: `${borderColor}33`, // Cor com transparência
+                fill: true, tension: 0.3, pointRadius: 0
+            }]
+        },
+        options: {
+            scales: {
+                x: { ticks: { color: '#bbb', maxTicksLimit: 8 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+                y: { beginAtZero: true, ticks: { color: '#bbb', callback: yAxisCallback }, grid: { color: 'rgba(255,255,255,0.05)' } }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: '#222', titleColor: '#fff', bodyColor: '#fff', displayColors: false,
+                    callbacks: { label: (ctx) => `${chartLabel}: ${yAxisCallback(ctx.parsed.y)}` }
+                }
+            }
+        }
+    });
+}
+
+async function toggleExpand(id, el, allComputers) {
+    if (el.classList.contains('popin-active')) return closePopin();
+    closePopin();
+
+    const pc = allComputers.find(p => p.id === id);
+    if (!pc) return;
+
+    // Cria a base do pop-in
+    const clone = el.cloneNode(true);
+    clone.classList.add('popin-card');
+    clone.removeAttribute('onclick');
+    clone.insertAdjacentHTML('beforeend', `
+        <div class="popin-details">
+            <hr>
+            <p><strong>Grupo:</strong> ${pc.group ?? '—'}</p>
+            <p><strong>IP:</strong> ${pc.ip ?? '—'}</p>
+            <p><strong>Status Agente:</strong> ${pc.agentStatus?.toUpperCase() ?? '-'}</p>
+            <p><strong>MAC:</strong> ${pc.macAddress ?? '—'}</p>
+            <p><strong>Uptime:</strong> ${formatUptime(pc.uptimeSec)}</p>
+            <p><strong>RAM Total:</strong> ${formatBytes(pc.totalRam)}</p>
+            <p><strong>Disco Total:</strong> ${formatBytes(pc.totalDisk)}</p>
+            <div id="charts-wrapper"></div>
+        </div>`);
+
+    const overlay = document.createElement('div');
+    overlay.className = 'popin-overlay';
+    overlay.appendChild(clone);
+    overlay.addEventListener('click', (e) => {
+        if (e.target.classList.contains('popin-overlay')) closePopin();
+    });
+    document.body.appendChild(overlay);
+    requestAnimationFrame(() => clone.classList.add('show'));
+
+    // Para de executar se não for um computador
+    if (getCategory(pc) !== 'computer') return;
+
+    const chartsWrapper = clone.querySelector('#charts-wrapper');
+    chartsWrapper.innerHTML = `<p>Carregando gráficos...</p>`;
+
+    try {
+        // Busca todos os dados em paralelo para mais performance
+        const [ramHistory, cpuHistory, diskHistory] = await Promise.all([
+            fetchRamHistory(pc.id),
+            fetchCpuHistory(pc.id),
+            fetchDiskHistory(pc.id)
+        ]);
+
+        chartsWrapper.innerHTML = ''; // Limpa a mensagem de "carregando"
+
+        // Renderiza cada gráfico usando a função auxiliar
+        createHistoryChart(chartsWrapper, 'cpuChart', '📈 Histórico de CPU (24h)', 'CPU', cpuHistory, v => `${v.toFixed(1)} %`, '#e91e63');
+        createHistoryChart(chartsWrapper, 'ramChart', '📊 Histórico de RAM (24h)', 'RAM', ramHistory, v => `${v.toFixed(2)} GB`, '#00bcd4');
+        createHistoryChart(chartsWrapper, 'diskChart', '💽 Histórico de Disco C: (24h)', 'Uso', diskHistory, v => `${v.toFixed(1)} %`, '#facc15');
+
+    } catch (err) {
+        console.error('Erro ao carregar dados de histórico:', err);
+        chartsWrapper.innerHTML = `<p>Falha ao carregar os gráficos.</p>`;
+    }
+}
+
+function closePopin() {
+    document.querySelectorAll('.popin-overlay').forEach(o => o.remove());
+}
+
+// =======================================================
+// INICIALIZAÇÃO E EXPORTAÇÕES GERAIS
+// =======================================================
+export function initializeUiFunctions(allComputers) {
+    window.toggleExpand = (id, el) => toggleExpand(id, el, allComputers);
+    window.closePopin = closePopin;
+}
+
+export function showLoading(show) {
+    const modal = document.getElementById('loadingModal');
+    if (modal) modal.classList.toggle('active', show);
+}
