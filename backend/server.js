@@ -308,11 +308,14 @@ app.post('/api/wol', async (req, res) => {
     const mac = extractFirstMac(macRaw);
     if (!mac) return res.status(400).json({ error: 'MAC inválido' });
 
+    console.log(`[LOCAL WOL] cmd=${WOL_CMD} mac=${mac}`);
     execFile(WOL_CMD, [mac], { timeout: 8000 }, (err, stdout, stderr) => {
       if (err) {
         console.error('Erro ao executar WOL local:', err.message, stderr);
         return res.status(500).json({ error: 'Falha ao executar WOL local' });
       }
+      if (stdout) console.log('[LOCAL WOL] stdout:', stdout.toString().trim());
+      if (stderr) console.log('[LOCAL WOL] stderr:', stderr.toString().trim());
       return res.json({ ok: true, stdout: (stdout || '').toString().trim() });
     });
   } catch (e) {
@@ -334,4 +337,3 @@ setInterval(async () => {
   console.log('Reautenticando no Zabbix (agendado)...');
   await authenticateZabbix();
 }, 3600000);
-
