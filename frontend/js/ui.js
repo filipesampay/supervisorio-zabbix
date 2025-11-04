@@ -289,7 +289,7 @@ async function toggleExpand(id, el, allComputers) {
 
         // Renderiza cada gráfico usando a função auxiliar
         createHistoryChart(chartsWrapper, 'cpuChart', '📈 Histórico de CPU (24h)', 'CPU', cpuHistory, v => `${v.toFixed(1)} %`, '#e91e63');
-        createHistoryChart(chartsWrapper, 'ramChart', 'Histórico de RAM (%) (24h)', 'RAM', ramHistory, v => ${v.toFixed(1)} %, '#00bcd4');
+        createHistoryChart(chartsWrapper, 'ramChart', 'Histórico de RAM (%) (24h)', 'RAM', ramHistory, v => `${v.toFixed(1)} %`, '#00bcd4');
         createHistoryChart(chartsWrapper, 'diskChart', '💽 Histórico de Disco C: (24h)', 'Uso', diskHistory, v => `${v.toFixed(1)} %`, '#facc15');
 
     } catch (err) {
@@ -323,6 +323,7 @@ export function showLoading(show) {
     const modal = document.getElementById('loadingModal');
     if (modal) modal.classList.toggle('active', show);
 }
+
 
 
 
