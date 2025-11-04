@@ -141,6 +141,15 @@ async function getItemValue(hostid, key) {
   }
 }
 
+// Tenta retornar o primeiro valor disponível dentre várias chaves
+async function getFirstPresent(hostid, keys = []) {
+  for (const key of keys) {
+    const v = await getItemValue(hostid, key);
+    if (v !== null && !Number.isNaN(v)) return v;
+  }
+  return null;
+}
+
 // ===================================================================
 // COLETA DE MÉTRICAS POR HOST
 // ===================================================================
@@ -190,11 +199,15 @@ async function getHostMetrics(hostid, hostName) {
       }
       metrics.ink = { black: bBlack, cyan: bCyan, magenta: bMagenta, yellow: bYellow };
     } else {
-      const [cpu, ram, pingValue, pingAlive] = await Promise.all([
+      const [cpu, pingValue, pingAlive] = await Promise.all([
         getItemValue(hostid, 'system.cpu.util'),
-        getItemValue(hostid, 'vm.memory.util' | 'vm.memory.utilization'),
         getItemValue(hostid, 'icmppingsec'),
         getItemValue(hostid, 'icmpping'),
+      ]);
+      // RAM: prioriza vm.memory.utilization (template Linux); fallback para vm.memory.util
+      const ram = await getFirstPresent(hostid, [
+        'vm.memory.utilization',
+        'vm.memory.util',
       ]);
       metrics.cpu = cpu || 0;
       metrics.ram = ram || 0;
@@ -237,7 +250,8 @@ async function getZabbixHistory(hostid, itemKey, historyType, valueFormatter = (
 // Rotas de histórico
 app.get('/api/history/:hostid/ram', async (req, res) => {
   try {
-    const data = await getZabbixHistory(req.params.hostid, 'vm.memory.size[used]', 3, (v) => parseFloat(v) / 1024 / 1024 / 1024);
+    // Utilização de memória (%) do template Linux
+    const data = await getZabbixHistory(req.params.hostid, 'vm.memory.utilization', 0, (v) => parseFloat(v));
     res.json(data);
   } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de RAM' }); }
 });
