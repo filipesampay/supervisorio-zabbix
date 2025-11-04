@@ -1,0 +1,40 @@
+// js/ui.js
+import { formatPing, formatBytes, formatUptime, formatMbps, getUsageClass, getCategory, shouldShowAgentBadge } from './utils.js';
+// ADICIONE AS NOVAS FUNÇÕES AO IMPORT
+import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory } from './api.js';
+
+// ... (cole aqui suas funções renderBlockFilter, renderComputers, applySort, createGroupHTML, e createComputerCard) ...
+
+// =======================================================
+// RENDERIZAÇÃO PRINCIPAL
+// =======================================================
+
+export function renderBlockFilter(computers, selectedBlock) {
+  const filterContainer = document.getElementById('blockFilter');
+  if (!filterContainer) return;
+
+  const uniqueGroups = [...new Set(computers.map(pc => pc.group).filter(Boolean))];
+
+  filterContainer.innerHTML = `
+    <button class="filter-btn ${selectedBlock === 'all' ? 'active' : ''}" onclick="selectBlock('all')">Todos</button>
+    ${uniqueGroups.sort().map(group => `
+      <button class="filter-btn ${group === selectedBlock ? 'active' : ''}" onclick="selectBlock('${group}')">${group}</button>
+    `).join('')}
+    <button class="filter-btn ${selectedBlock === 'highPing' ? 'active' : ''}" onclick="selectBlock('highPing')">Ping alto</button>
+    <button class="filter-btn ${selectedBlock === 'agentOff' ? 'active' : ''}" onclick="selectBlock('agentOff')">Agente OFF</button>
+  `;
+}
+
+export function renderComputers(computers, state) {
+  const grid = document.getElementById('computersGrid');
+  if (!grid) return;
+
+  let filtered = [...computers];
+
+  // Filtros
+  if (state.selectedBlock === 'highPing') {
+    filtered = filtered.filter(pc => (pc.ping ?? 0) > 100);
+  } else if (state.selectedBlock === 'agentOff') {
+    filtered = filtered.filter(pc => pc.agentStatus === 'offline' || pc.agentStatus === 0);
+  } else if (state.selectedBlock !== 'all' && state.selectedBlock) {
+    filtered = filtered.filter(pc => pc.group === state.selectedBlock);

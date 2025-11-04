@@ -1,0 +1,220 @@
+// = ==================================================================
+// IMPORTS E CONFIGURAÇÃO INICIAL
+// ===================================================================
+const express = require("express");
+const cors = require("cors");
+const axios = require("axios");
+// ... (resto dos seus imports)
+const http = require("http");
+const https = require("https");
+const fs = require('fs');
+const path = require('path');
+// Carrega .env do diretório raiz (../.env) se existir
+try {
+  const envPath = path.resolve(__dirname, '../.env');
+  if (fs.existsSync(envPath)) {
+    const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+    lines.forEach((line) => {
+      if (!line || line.trim().startsWith('#')) return;
+      const idx = line.indexOf('=');
+      if (idx > 0) {
+        const key = line.substring(0, idx).trim();
+        const val = line.substring(idx + 1).trim();
+        if (!process.env[key]) process.env[key] = val;
+      }
+    });
+  }
+} catch (e) {
+  console.warn('Não foi possível carregar .env:', e.message);
+}
+const app = express();
+const { execFile } = require('child_process');
+let wolLib = null;
+const PORT = process.env.PORT || 3000;
+// ... (resto da sua configuração inicial)
+app.use(cors());
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ limit: "10mb", extended: true }));
+
+// Configuração opcional para script externo de WOL
+const WOL_SCRIPT_PATH = process.env.WOL_SCRIPT_PATH || null; // exemplo: /usr/local/bin/wake-host.sh
+const WOL_BROADCAST = process.env.WOL_BROADCAST || '255.255.255.255';
+
+
+// ===================================================================
+// ... (COLE AQUI TODO O SEU CÓDIGO DO ZABBIX ATÉ A SEÇÃO DE ROTAS)
+// authenticateZabbix, ensureAuth, getZabbixHosts, getItemValue, getHostMetrics
+// ...
+// ===================================================================
+
+const ZABBIX_CONFIG = {
+  url: process.env.ZABBIX_URL || "http://192.168.1.5/zabbix/api_jsonrpc.php",
+  user: process.env.ZABBIX_USER || "Admin",
+  password: process.env.ZABBIX_PASSWORD || "zabbix",
+};
+
+const axiosInstance = axios.create({
+  httpAgent: new http.Agent({ keepAlive: true, maxSockets: 20 }),
+  httpsAgent: new https.Agent({ keepAlive: true, maxSockets: 20 }),
+  timeout: 10000,
+});
+
+let zabbixAuthToken = null;
+
+async function authenticateZabbix() {
+  try {
+    const response = await axiosInstance.post(ZABBIX_CONFIG.url, {
+      jsonrpc: "2.0",
+      method: "user.login",
+      params: { username: ZABBIX_CONFIG.user, password: ZABBIX_CONFIG.password },
+      id: 1,
+    });
+
+    if (response.data.error) {
+      console.error("❌ Erro de autenticação Zabbix:", response.data.error);
+      zabbixAuthToken = null;
+      return null;
+    }
+
+    zabbixAuthToken = response.data.result;
+    console.log("✅ Autenticado no Zabbix com sucesso");
+    return zabbixAuthToken;
+  } catch (error) {
+    console.error("❌ Erro ao autenticar no Zabbix:", error.message);
+    zabbixAuthToken = null;
+    return null;
+  }
+}
+
+async function ensureAuth() {
+  if (!zabbixAuthToken) {
+    console.log("🔑 Token ausente, autenticando novamente...");
+    await authenticateZabbix();
+  }
+}
+
+async function getZabbixHosts() {
+  try {
+    await ensureAuth();
+
+    const response = await axiosInstance.post(ZABBIX_CONFIG.url, {
+      jsonrpc: "2.0",
+      method: "host.get",
+      params: {
+        output: ["hostid", "host", "name", "status"],
+        selectInterfaces: ["ip"],
+        selectGroups: ["name"],
+        selectInventory: ["macaddress_a", "macaddress_b"],
+      },
+      auth: zabbixAuthToken,
+      id: 2,
+    });
+
+    if (response.data.error) {
+      console.error("Erro da API Zabbix ao buscar hosts:", response.data.error);
+      return [];
+    }
+
+    return response.data.result;
+  } catch (error) {
+    console.error("Erro ao buscar hosts Zabbix:", error.message);
+    return [];
+  }
+}
+
+// Retorna o lastvalue como string (para itens não numéricos como MAC address)
+async function getItemValueString(hostid, key) {
+  try {
+    await ensureAuth();
+    const req = {
+      jsonrpc: "2.0",
+      method: "item.get",
+      params: {
+        output: ["lastvalue"],
+        hostids: hostid,
+        filter: { key_: key },
+        limit: 1,
+      },
+      auth: zabbixAuthToken,
+      id: Math.floor(Math.random() * 10000),
+    };
+    const resp = await axiosInstance.post(ZABBIX_CONFIG.url, req);
+    if (resp.data.result?.length > 0) return (resp.data.result[0].lastvalue ?? '').toString();
+    return null;
+  } catch (err) {
+    console.warn(`?? Erro ao buscar item (string) ${key} em ${hostid}: ${err.message}`);
+    return null;
+  }
+}
+
+async function getItemValue(hostid, key) {
+  try {
+    await ensureAuth();
+    const req = {
+      jsonrpc: "2.0",
+      method: "item.get",
+      params: {
+        output: ["lastvalue"],
+        hostids: hostid,
+        filter: { key_: key },
+        limit: 1,
+      },
+      auth: zabbixAuthToken,
+      id: Math.floor(Math.random() * 10000),
+    };
+    const resp = await axiosInstance.post(ZABBIX_CONFIG.url, req);
+    if (resp.data.result?.length > 0)
+      return parseFloat(resp.data.result[0].lastvalue) || 0;
+    return null;
+  } catch (err) {
+    console.warn(`⚠️ Erro ao buscar item ${key} em ${hostid}: ${err.message}`);
+    return null;
+  }
+}
+
+// ===================================================================
+// COLETA DE MÉTRICAS POR HOST (VERSÃO CORRIGIDA PARA BROTHER)
+// ===================================================================
+async function getHostMetrics(hostid, hostName) {
+  const name = hostName.toLowerCase();
+  const metrics = {
+    cpu: null, ram: null, ping: null, pingAlive: null, pingLoss: null,
+    netRx: null, netTx: null, ink: null, agentStatus: null, macAddress: null,
+    uptimeSec: null, totalRam: null, totalDisk: null,
+  };
+
+  try {
+    await ensureAuth();
+
+    // Lógica para Roteadores/Switches
+    if (name.includes("router") || name.includes("switch") || name.includes("unifi")) {
+      metrics.ping = await getItemValue(hostid, "icmppingsec");
+      metrics.pingAlive = await getItemValue(hostid, "icmpping");
+      metrics.netRx = await getItemValue(hostid, "unifiIfRxBytes.1");
+      metrics.netTx = await getItemValue(hostid, "unifiIfTxBytes.1");
+    
+    // Lógica para Câmeras
+    } else if (name.includes("cam") || name.includes("camera") || name.includes("ezviz") || name.includes("hikvision")) {
+      metrics.ping = await getItemValue(hostid, "icmppingsec");
+      metrics.pingAlive = await getItemValue(hostid, "icmpping");
+      metrics.pingLoss = await getItemValue(hostid, "icmppingloss");
+    
+    // Lógica para Epson (tinta em garrafa)
+    } else if (name.includes("epson")) {
+      metrics.ping = await getItemValue(hostid, "icmppingsec");
+      metrics.pingAlive = await getItemValue(hostid, "icmpping");
+      metrics.ink = {
+        black: await getItemValue(hostid, "prtMarkerSuppliesCapacity[Black Ink Bottle]"),
+        cyan: await getItemValue(hostid, "prtMarkerSuppliesCapacity[Cyan Ink Bottle]"),
+        magenta: await getItemValue(hostid, "prtMarkerSuppliesCapacity[Magenta Ink Bottle]"),
+        yellow: await getItemValue(hostid, "prtMarkerSuppliesCapacity[Yellow Ink Bottle]"),
+      };
+
+    // Lógica para Brother (toner em cartucho)
+    } else if (name.includes("brother")) {
+        metrics.ping = await getItemValue(hostid, "icmppingsec");
+        metrics.pingAlive = await getItemValue(hostid, "icmpping");
+        
+        // --- CHAVES CORRIGIDAS (MELHOR PALPITE) ---
+        // Verifique no seu Zabbix se estas são as chaves corretas!
+        const [black, cyan, magenta, yellow] = await Promise.all([

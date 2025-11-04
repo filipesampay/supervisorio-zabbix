@@ -653,3 +653,45 @@ body {
   border-radius: 10px;
   padding: 5px;
 }
+
+/* ========================================================= */
+/*  WOL E MAC NO CARD  */
+/* ========================================================= */
+.card-extras {
+  display: flex;
+  gap: 0.6rem;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 0.5rem;
+}
+.mac-label {
+  font-size: 0.8rem;
+  color: #9ca3af;
+}
+.wol-btn {
+  background: #2563eb;
+  color: #f9fafb;
+  border: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 9999px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+.wol-btn:hover { background: #1d4ed8; }
+.wol-btn[disabled] {
+  background: #374151;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+/* Pequeno espaçador antes do bloco de tinta */
+.ink-break { height: 6px; }
+/* Filtro customizado */
+.filter-builder { display: grid; gap: 8px; padding: 8px 0; }
+.filter-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.filter-row label { color: #9ca3af; font-size: 0.85rem; }
+#filterField,#filterOp,#filterValue,#sortField,#sortDir { background:#111827; color:#e5e7eb; border:1px solid #374151; border-radius:6px; padding:6px; }

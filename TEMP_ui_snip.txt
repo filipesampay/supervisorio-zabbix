@@ -1,0 +1,20 @@
+    const cat = getCategory(pc);
+    const ping = pingResults[pc.id] || { status: null, time: null };
+    const { pingText, pingClass } = formatPing(ping);
+
+    const pingBadge = pc.pingAlive ? `<span class="status-badge online">ONLINE</span>` : `<span class="status-badge offline">OFFLINE</span>`;
+    const agentBadge = (shouldShowAgentBadge(pc) && pc.agentStatus) ? (pc.agentStatus === 'online' ? `<span class="status-badge agent-online">AGENTE ON</span>` : pc.agentStatus === 'offline' ? `<span class="status-badge agent-offline">AGENTE OFF</span>` : '') : '';
+
+    return `
+        <div class="computer-card" data-cat="${cat}" onclick="toggleExpand(${pc.id}, this)">
+            <div class="card-header">
+                <h3>${pc.name}</h3>
+                <div class="status-area">${pingBadge}${agentBadge}</div>
+            </div>
+            <div class="metrics">
+                ${cat === 'computer' ? `
+                    <div class="metric"><div class="metric-header"><span class="metric-label">CPU</span><span class="metric-value">${pc.cpu?.toFixed(1) ?? 0}%</span></div><div class="progress-bar"><div class="progress-fill ${getUsageClass(pc.cpu)}" style="width:${pc.cpu ?? 0}%"></div></div></div>
+                    <div class="metric"><div class="metric-header"><span class="metric-label">RAM</span><span class="metric-value">${pc.ram?.toFixed(1) ?? 0}%</span></div><div class="progress-bar"><div class="progress-fill ${getUsageClass(pc.ram)}" style="width:${pc.ram ?? 0}%"></div></div></div>` : ''}
+                ${cat === 'network' ? `<div class="metric metric-net"><span class="metric-label">Tráfego</span><div class="net-pair"><span class="metric-value net-val"><i class="fas fa-arrow-down"></i> ${pc.netRx ? formatMbps(pc.netRx) : '—'}</span><span class="metric-value net-val up"><i class="fas fa-arrow-up"></i> ${pc.netTx ? formatMbps(pc.netTx) : '—'}</span></div></div>` : ''}
+                ${cat === 'camera' ? `<div class="metric"><span class="metric-label">Perda</span><span class="metric-value">${pc.pingLoss?.toFixed(2) ?? '—'}%</span></div>` : ''}
+                ${pc.ink && Object.values(pc.ink).some(v => v !== null) ? (() => { // Condição melhorada

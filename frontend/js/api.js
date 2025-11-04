@@ -1,6 +1,6 @@
 // js/api.js
 
-const API_URL = 'http://192.168.5.148:3000/api';
+const API_URL = 'http://localhost:3000/api';
 
 /**
  * Busca a lista completa de computadores.
@@ -61,4 +61,25 @@ export async function fetchDiskHistory(computerId) {
         console.error(`Falha ao buscar histórico de Disco para ID ${computerId}:`, error);
         return null;
     }
+}
+
+/**
+ * Dispara Wake-on-LAN para um MAC informado.
+ */
+export async function sendWakeOnLan(mac) {
+  try {
+    const response = await fetch(`${API_URL}/wol`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mac }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err?.error || `HTTP error! status: ${response.status}`);
+    }
+    return await response.json();
+  } catch (error) {
+    console.error('Falha ao enviar WOL:', error);
+    throw error;
+  }
 }

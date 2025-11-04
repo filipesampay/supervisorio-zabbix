@@ -1,7 +1,7 @@
 // js/ui.js
 import { formatPing, formatBytes, formatUptime, formatMbps, getUsageClass, getCategory, shouldShowAgentBadge } from './utils.js';
 // ADICIONE AS NOVAS FUNÇÕES AO IMPORT
-import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory } from './api.js';
+import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory, sendWakeOnLan } from './api.js';
 
 // ... (cole aqui suas funções renderBlockFilter, renderComputers, applySort, createGroupHTML, e createComputerCard) ...
 
@@ -9,20 +9,50 @@ import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory } from './api.js';
 // RENDERIZAÇÃO PRINCIPAL
 // =======================================================
 
-export function renderBlockFilter(computers, selectedBlock) {
+export function renderBlockFilter(computers, state) {
   const filterContainer = document.getElementById('blockFilter');
   if (!filterContainer) return;
-
-  const uniqueGroups = [...new Set(computers.map(pc => pc.group).filter(Boolean))];
-
+  const sf = state?.sort?.field || '';
+  const sd = state?.sort?.dir || 'asc';
+  const ff = state?.filter?.field || '';
+  const fo = state?.filter?.op || '';
+  const fv = state?.filter?.value || '';
   filterContainer.innerHTML = `
-    <button class="filter-btn ${selectedBlock === 'all' ? 'active' : ''}" onclick="selectBlock('all')">Todos</button>
-    ${uniqueGroups.sort().map(group => `
-      <button class="filter-btn ${group === selectedBlock ? 'active' : ''}" onclick="selectBlock('${group}')">${group}</button>
-    `).join('')}
-    <button class="filter-btn ${selectedBlock === 'highPing' ? 'active' : ''}" onclick="selectBlock('highPing')">Ping alto</button>
-    <button class="filter-btn ${selectedBlock === 'agentOff' ? 'active' : ''}" onclick="selectBlock('agentOff')">Agente OFF</button>
-  `;
+    <div class="filter-builder">
+      <div class="filter-row">
+        <label>Filtrar por</label>
+        <select id="filterField">
+          <option value="">(Sem filtro)</option>
+          <option value="name" ${ff==='name'?'selected':''}>Nome</option>
+          <option value="group" ${ff==='group'?'selected':''}>Grupo</option>
+          <option value="ip" ${ff==='ip'?'selected':''}>IP</option>
+          <option value="agentStatus" ${ff==='agentStatus'?'selected':''}>Agente</option>
+          <option value="category" ${ff==='category'?'selected':''}>Categoria</option>
+          <option value="cpu" ${ff==='cpu'?'selected':''}>CPU</option>
+          <option value="ram" ${ff==='ram'?'selected':''}>RAM</option>
+          <option value="ping" ${ff==='ping'?'selected':''}>Ping</option>
+        </select>
+        <select id="filterOp">${fo ? `<option value="${fo}" selected>${fo}</option>` : ''}</select>
+        <input id="filterValue" value="${fv ?? ''}" placeholder="valor" />
+        <button id="filterClear" class="filter-btn">Limpar</button>
+      </div>
+      <div class="filter-row">
+        <label>Ordenar</label>
+        <select id="sortField">
+          <option value="">(Sem ordenação)</option>
+          <option value="name" ${sf==='name'?'selected':''}>Nome</option>
+          <option value="group" ${sf==='group'?'selected':''}>Grupo</option>
+          <option value="cpu" ${sf==='cpu'?'selected':''}>CPU</option>
+          <option value="ram" ${sf==='ram'?'selected':''}>RAM</option>
+          <option value="ping" ${sf==='ping'?'selected':''}>Ping</option>
+          <option value="agentStatus" ${sf==='agentStatus'?'selected':''}>Agente</option>
+        </select>
+        <select id="sortDir">
+          <option value="asc" ${sd==='asc'?'selected':''}>Crescente</option>
+          <option value="desc" ${sd==='desc'?'selected':''}>Decrescente</option>
+        </select>
+      </div>
+    </div>`;
 }
 
 export function renderComputers(computers, state) {
@@ -31,13 +61,24 @@ export function renderComputers(computers, state) {
 
   let filtered = [...computers];
 
-  // Filtros
-  if (state.selectedBlock === 'highPing') {
-    filtered = filtered.filter(pc => (pc.ping ?? 0) > 100);
-  } else if (state.selectedBlock === 'agentOff') {
-    filtered = filtered.filter(pc => pc.agentStatus === 'offline' || pc.agentStatus === 0);
-  } else if (state.selectedBlock !== 'all' && state.selectedBlock) {
-    filtered = filtered.filter(pc => pc.group === state.selectedBlock);
+  // Filtro personalizado
+  const f = state.filter || {};
+  if (f.field && f.op) {
+    filtered = filtered.filter((pc) => {
+      const val = (pc[f.field] ?? '').toString().toLowerCase();
+      const raw = pc[f.field];
+      const num = typeof raw === 'number' ? raw : parseFloat(raw);
+      const cmp = (f.value ?? '').toString().toLowerCase();
+      switch (f.op) {
+        case 'contains': return val.includes(cmp);
+        case 'eq': return val === cmp || (Number.isFinite(num) && num === parseFloat(f.value));
+        case 'gt': return Number.isFinite(num) && num > parseFloat(f.value);
+        case 'gte': return Number.isFinite(num) && num >= parseFloat(f.value);
+        case 'lt': return Number.isFinite(num) && num < parseFloat(f.value);
+        case 'lte': return Number.isFinite(num) && num <= parseFloat(f.value);
+        default: return true;
+      }
+    });
   }
 
   // Busca
@@ -49,8 +90,8 @@ export function renderComputers(computers, state) {
     );
   }
 
-  // Ordenação
-  applySort(filtered, state.currentSort);
+  // Ordenação customizada
+  applySort(filtered, state.sort);
 
   // Agrupamento
   const grouped = filtered.reduce((acc, pc) => {
@@ -75,15 +116,15 @@ export function renderComputers(computers, state) {
 // FUNÇÕES AUXILIARES DE GERAÇÃO DE HTML (não exportadas)
 // =======================================================
 
-function applySort(list, criteria) {
-  if (!criteria) return list;
-  switch (criteria) {
-    case 'nameAsc': list.sort((a, b) => a.name.localeCompare(b.name)); break;
-    case 'nameDesc': list.sort((a, b) => b.name.localeCompare(a.name)); break;
-    case 'cpu': list.sort((a, b) => (b.cpu ?? 0) - (a.cpu ?? 0)); break;
-    case 'ram': list.sort((a, b) => (b.ram ?? 0) - (a.ram ?? 0)); break;
-    case 'ping': list.sort((a, b) => (b.ping ?? 0) - (a.ping ?? 0)); break;
-  }
+function applySort(list, sort) {
+  if (!sort || !sort.field) return list;
+  const dir = sort.dir === 'desc' ? -1 : 1;
+  list.sort((a, b) => {
+    const va = a[sort.field];
+    const vb = b[sort.field];
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+    return String(va ?? '').localeCompare(String(vb ?? '')) * dir;
+  });
 }
 
 function createGroupHTML(group, list, pingResults, allComputers) {
@@ -102,8 +143,13 @@ function createComputerCard(pc, pingResults) {
     const pingBadge = pc.pingAlive ? `<span class="status-badge online">ONLINE</span>` : `<span class="status-badge offline">OFFLINE</span>`;
     const agentBadge = (shouldShowAgentBadge(pc) && pc.agentStatus) ? (pc.agentStatus === 'online' ? `<span class="status-badge agent-online">AGENTE ON</span>` : pc.agentStatus === 'offline' ? `<span class="status-badge agent-offline">AGENTE OFF</span>` : '') : '';
 
+    const macHtml = pc.macAddress ? `<span class=\"mac-label\">MAC: ${pc.macAddress}</span>` : '<span class=\"mac-label\">MAC: -</span>';
+    const wolBtn = pc.macAddress
+        ? `<button class=\"wol-btn\" title=\"Wake on LAN\" onclick=\"event.stopPropagation(); wakeOnLan('${pc.macAddress}')\"><i class=\"fas fa-power-off\"></i></button>`
+        : `<button class=\"wol-btn\" disabled title=\"Sem MAC\"><i class=\"fas fa-power-off\"></i></button>`;
+
     return `
-        <div class="computer-card" data-cat="${cat}" onclick="toggleExpand(${pc.id}, this)">
+        <div class="computer-card" id="host-card-${pc.id}" data-cat="${cat}" onclick="toggleExpand(${pc.id}, this)">
             <div class="card-header">
                 <h3>${pc.name}</h3>
                 <div class="status-area">${pingBadge}${agentBadge}</div>
@@ -132,8 +178,12 @@ function createComputerCard(pc, pingResults) {
                     const lowInk = Object.values(pc.ink).some(v => v !== null && v < 15);
                     const inkBadge = lowInk ? `<span class="status-badge ink-low">TINTA BAIXA</span>` : '';
                     
-                    return `<div class="metric ink-levels ${isMonochrome ? 'single-ink' : ''}">${inkBadge}${inkTanks}</div>`;
+                    return `<div class="ink-break"></div><div class="metric ink-levels ${isMonochrome ? 'single-ink' : ''}">${inkBadge}${inkTanks}</div>`;
                 })() : ''}
+            </div>
+            <div class="card-extras">
+                ${macHtml}
+                ${wolBtn}
             </div>
             <div class="card-footer">
                 <span class="ping-label">Ping:</span>
@@ -219,6 +269,7 @@ async function toggleExpand(id, el, allComputers) {
     });
     document.body.appendChild(overlay);
     requestAnimationFrame(() => clone.classList.add('show'));
+    try { localStorage.setItem('expandedHostId', String(id)); } catch (_) {}
 
     // Para de executar se não for um computador
     if (getCategory(pc) !== 'computer') return;
@@ -249,6 +300,7 @@ async function toggleExpand(id, el, allComputers) {
 
 function closePopin() {
     document.querySelectorAll('.popin-overlay').forEach(o => o.remove());
+    try { localStorage.removeItem('expandedHostId'); } catch (_) {}
 }
 
 // =======================================================
@@ -257,9 +309,30 @@ function closePopin() {
 export function initializeUiFunctions(allComputers) {
     window.toggleExpand = (id, el) => toggleExpand(id, el, allComputers);
     window.closePopin = closePopin;
+    window.wakeOnLan = async (mac) => {
+        try {
+            const res = await sendWakeOnLan(mac);
+            alert(res && res.ok ? 'Pacote WOL enviado.' : (res?.error || 'Falha ao enviar WOL.'));
+        } catch (e) {
+            alert('Erro ao enviar WOL: ' + (e?.message || 'desconhecido'));
+        }
+    };
 }
 
 export function showLoading(show) {
     const modal = document.getElementById('loadingModal');
     if (modal) modal.classList.toggle('active', show);
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
