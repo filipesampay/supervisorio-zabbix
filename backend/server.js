@@ -34,17 +34,8 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Configuração opcional para WOL
-const WOL_SCRIPT_PATH = process.env.WOL_SCRIPT_PATH || null; // ex: /usr/local/bin/wake-host.sh
-const WOL_BROADCAST = process.env.WOL_BROADCAST || '255.255.255.255';
-const WOL_PORT = parseInt(process.env.WOL_PORT || '9', 10);
-// Execução remota por SSH (quando WOL precisa sair do servidor Zabbix)
-const WOL_SSH_HOST = process.env.WOL_SSH_HOST || null; // ex: 192.168.1.5
-const WOL_SSH_USER = process.env.WOL_SSH_USER || 'root';
-const WOL_SSH_PORT = parseInt(process.env.WOL_SSH_PORT || '22', 10);
-const WOL_SSH_KEY  = process.env.WOL_SSH_KEY  || null; // caminho para chave privada
-const WOL_REMOTE_CMD = process.env.WOL_REMOTE_CMD || 'wol'; // comando remoto, ex.: 'WOL' ou 'wakeonlan'
-let wolLib = null;
+// WOL local: apenas executa "wol <mac>" no servidor Linux
+const WOL_CMD = process.env.WOL_CMD || 'wol';
 
 // Utilitário: primeiro MAC válido (00:11:22..., 00-11-22..., ou 001122334455)
 function extractFirstMac(text) {
@@ -179,20 +170,15 @@ async function getHostMetrics(hostid, hostName) {
     } else if (name.includes('brother')) {
       metrics.ping = await getItemValue(hostid, 'icmppingsec');
       metrics.pingAlive = await getItemValue(hostid, 'icmpping');
-      // Tenta primeiro as chaves específicas citadas
       let [bBlack, bCyan, bMagenta, bYellow] = await Promise.all([
         getItemValue(hostid, 'brother.ink.black'),
         getItemValue(hostid, 'brother.ink.cyan'),
         getItemValue(hostid, 'brother.ink.magenta'),
         getItemValue(hostid, 'brother.ink.yellow'),
       ]);
-
-      // Se não houver valores, tenta chave de toner preto única
       if (bBlack == null && bCyan == null && bMagenta == null && bYellow == null) {
         bBlack = await getItemValue(hostid, 'brother.toner.black');
       }
-
-      // Fallback para chaves SNMP genéricas, caso a Brother use MIB padrão
       if (bBlack == null && bCyan == null && bMagenta == null && bYellow == null) {
         const [pBlack, pCyan, pMagenta, pYellow] = await Promise.all([
           getItemValue(hostid, 'prtMarkerSuppliesLevel[Black Toner Cartridge]'),
@@ -202,7 +188,6 @@ async function getHostMetrics(hostid, hostName) {
         ]);
         bBlack = pBlack; bCyan = pCyan; bMagenta = pMagenta; bYellow = pYellow;
       }
-
       metrics.ink = { black: bBlack, cyan: bCyan, magenta: bMagenta, yellow: bYellow };
     } else {
       const [cpu, ram, pingValue, pingAlive] = await Promise.all([
@@ -323,43 +308,15 @@ app.post('/api/wol', async (req, res) => {
     const mac = extractFirstMac(macRaw);
     if (!mac) return res.status(400).json({ error: 'MAC inválido' });
 
-    if (WOL_SCRIPT_PATH) {
-      execFile(WOL_SCRIPT_PATH, [mac, WOL_BROADCAST, String(WOL_PORT)], { timeout: 8000 }, (err, stdout, stderr) => {
-        if (err) {
-          console.error('Erro ao executar script WOL:', err.message, stderr);
-          return res.status(500).json({ error: 'Falha ao executar script WOL' });
-        }
-        return res.json({ ok: true, stdout: (stdout || '').toString().trim() });
-      });
-      return;
-    }
-
-    if (WOL_SSH_HOST) {
-      const sshArgs = [];
-      if (WOL_SSH_KEY) sshArgs.push('-i', WOL_SSH_KEY);
-      sshArgs.push('-p', String(WOL_SSH_PORT));
-      sshArgs.push(`${WOL_SSH_USER}@${WOL_SSH_HOST}`);
-      sshArgs.push(`${WOL_REMOTE_CMD} ${mac}`);
-
-      execFile('ssh', sshArgs, { timeout: 8000 }, (err, stdout, stderr) => {
-        if (err) {
-          console.error('Erro ao executar SSH para WOL:', err.message, stderr);
-          return res.status(500).json({ error: 'Falha ao enviar WOL via SSH' });
-        }
-        return res.json({ ok: true, stdout: (stdout || '').toString().trim() });
-      });
-      return;
-    }
-
-    try { if (!wolLib) wolLib = require('wake_on_lan'); }
-    catch (e) { console.error('Biblioteca wake_on_lan não disponível e sem script externo'); return res.status(500).json({ error: 'WOL indisponível no servidor' }); }
-
-    wolLib.wake(mac, { address: WOL_BROADCAST, port: WOL_PORT }, (err) => {
+    console.log(`[LOCAL WOL] cmd=${WOL_CMD} mac=${mac}`);
+    execFile(WOL_CMD, [mac], { timeout: 8000 }, (err, stdout, stderr) => {
       if (err) {
-        console.error('Falha ao enviar pacote WOL:', err.message);
-        return res.status(500).json({ error: 'Falha ao enviar pacote WOL' });
+        console.error('Erro ao executar WOL local:', err.message, stderr);
+        return res.status(500).json({ error: 'Falha ao executar WOL local' });
       }
-      return res.json({ ok: true });
+      if (stdout) console.log('[LOCAL WOL] stdout:', stdout.toString().trim());
+      if (stderr) console.log('[LOCAL WOL] stderr:', stderr.toString().trim());
+      return res.json({ ok: true, stdout: (stdout || '').toString().trim() });
     });
   } catch (e) {
     console.error('Erro na rota /api/wol:', e.message);

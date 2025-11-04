@@ -1,6 +1,6 @@
 // js/api.js
 
-const API_URL = 'http://localhost:3000/api';
+const API_URL = 'http://192.168.1.5:3000/api';
 
 /**
  * Busca a lista completa de computadores.
