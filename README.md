@@ -2,25 +2,44 @@ Supervisório de Computadores
 Sistema de monitoramento em tempo real do parque de computadores da empresa, com integração ao Zabbix.
 
 📋 Funcionalidades
-✅ Monitoramento em tempo real de CPU e RAM
-✅ Organização por blocos/setores
-✅ Wake-on-LAN para ligar computadores remotamente
-✅ Ping para verificar conectividade
-✅ Dashboard com estatísticas por bloco
-✅ Interface responsiva e moderna
-✅ Atualização automática dos dados
+  ✅ Monitoramento em tempo real de CPU e RAM
+  
+  ✅ Organização por blocos/setores
+  
+  ✅ Wake-on-LAN para ligar computadores remotamente
+  
+  ✅ Ping para verificar conectividade
+  
+  ✅ Dashboard com estatísticas por bloco
+  
+  ✅ Interface responsiva e moderna
+  
+  ✅ Atualização automática dos dados
+  
 🛠️ Tecnologias
 Frontend
 HTML5
+
 CSS3
+
 JavaScript Vanilla
+
 Font Awesome (ícones)
+
 Backend
+
 Node.js
+
 Express
+
 Axios (comunicação com Zabbix API)
+
 Wake-on-LAN
+
 Ping
+
+
+
 📦 Estrutura do Projeto
 supervisorio/
 ├── frontend/
@@ -32,6 +51,8 @@ supervisorio/
 │   ├── package.json
 │   └── .env
 └── README.md
+
+
 🚀 Instalação
 1. Clone o repositório
 bash
@@ -41,7 +62,8 @@ cd supervisorio
 bash
 cd backend
 npm install
-3. Configure as variáveis de ambiente
+
+4. Configure as variáveis de ambiente
 Edite o arquivo .env com suas credenciais do Zabbix:
 
 env
@@ -49,6 +71,7 @@ PORT=3000
 ZABBIX_URL=http://seu-servidor-zabbix/api_jsonrpc.php
 ZABBIX_USER=Admin
 ZABBIX_PASSWORD=sua-senha
+
 4. Inicie o servidor
 bash
 npm start
@@ -187,6 +210,7 @@ Limite as permissões do usuário Zabbix
  Adicionar mais métricas (disco, rede, etc)
  Interface de administração
  Logs de ações executadas
+ 
 🐛 Troubleshooting
 Erro de conexão com Zabbix
 Verifique se:
@@ -204,6 +228,7 @@ Dados não atualizam
 Verifique o console do navegador (F12)
 Confirme se o backend está rodando
 Verifique a configuração de CORS
+
 📄 Licença
 MIT
 
