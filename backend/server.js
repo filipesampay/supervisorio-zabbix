@@ -192,7 +192,7 @@ async function getHostMetrics(hostid, hostName) {
     } else {
       const [cpu, ram, pingValue, pingAlive] = await Promise.all([
         getItemValue(hostid, 'system.cpu.util'),
-        getItemValue(hostid, 'vm.memory.util'),
+        getItemValue(hostid, 'vm.memory.util' | 'vm.memory.utilization'),
         getItemValue(hostid, 'icmppingsec'),
         getItemValue(hostid, 'icmpping'),
       ]);
