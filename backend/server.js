@@ -280,10 +280,38 @@ async function getZabbixHistoryFirst(hostid, itemKeys = [], historyType, valueFo
 // Rotas de histórico
 app.get('/api/history/:hostid/ram', async (req, res) => {
   try {
-    // Utilização de memória (%) do template Linux
-    const data = await getZabbixHistory(req.params.hostid, 'vm.memory.utilization', 0, (v) => parseFloat(v));
-    res.json(data);
-  } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de RAM' }); }
+    await ensureAuth();
+
+    // 1) Tenta diretamente a métrica de utilização (%) do template Linux
+    const utilHistory = await getZabbixHistory(req.params.hostid, 'vm.memory.utilization', 0, (v) => parseFloat(v));
+    if (utilHistory && utilHistory.length > 0) {
+      return res.json(utilHistory);
+    }
+
+    // 2) Fallback: usa histórico de bytes usados e converte para % com base no total atual
+    const usedHistory = await getZabbixHistory(req.params.hostid, 'vm.memory.size[used]', 3, (v) => parseFloat(v));
+    if (!usedHistory || usedHistory.length === 0) {
+      return res.json([]);
+    }
+
+    // Busca total atual (bytes)
+    const totalNow = await getItemValue(req.params.hostid, 'vm.memory.size[total]');
+    const totalBytes = Number(totalNow) || 0;
+    if (totalBytes <= 0) {
+      // Sem total, retorna valores em GB para não ficar em branco (compatibilidade)
+      const gbSeries = usedHistory.map(h => ({ time: h.time, value: (Number(h.value) || 0) / 1024 / 1024 / 1024 }));
+      return res.json(gbSeries);
+    }
+
+    const percentSeries = usedHistory.map(h => {
+      const used = Number(h.value) || 0;
+      const pct = Math.max(0, Math.min(100, (used / totalBytes) * 100));
+      return { time: h.time, value: pct };
+    });
+    return res.json(percentSeries);
+  } catch (err) {
+    res.status(500).json({ error: 'Erro ao buscar histórico de RAM' });
+  }
 });
 app.get('/api/history/:hostid/cpu', async (req, res) => {
   try { res.json(await getZabbixHistory(req.params.hostid, 'system.cpu.util', 0)); }
