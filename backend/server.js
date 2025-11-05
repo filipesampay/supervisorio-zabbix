@@ -215,7 +215,11 @@ async function getHostMetrics(hostid, hostName) {
       metrics.pingAlive = !!(pingAlive && Number(pingAlive) >= 1);
       metrics.uptimeSec = await getItemValue(hostid, 'system.uptime');
       metrics.totalRam = await getItemValue(hostid, 'vm.memory.size[total]');
-      metrics.totalDisk = await getItemValue(hostid, 'vfs.fs.size[C:,total]');
+      // Total de disco: tenta Linux (/) e fallback para Windows (C:)
+      metrics.totalDisk = await getFirstPresent(hostid, [
+        'vfs.fs.size[/,total]',
+        'vfs.fs.size[C:,total]'
+      ]);
     }
     const agentPing = await getItemValue(hostid, 'agent.ping');
     metrics.agentStatus = agentPing > 0 ? 'online' : 'offline';
