@@ -251,6 +251,32 @@ async function getZabbixHistory(hostid, itemKey, historyType, valueFormatter = (
   return historyResp.data.result.map((h) => ({ time: Number(h.clock), value: valueFormatter(h.value) }));
 }
 
+// Busca histórico do primeiro item disponível dentre várias chaves (conveniência para Linux/Windows)
+async function getZabbixHistoryFirst(hostid, itemKeys = [], historyType, valueFormatter = (v) => parseFloat(v)) {
+  await ensureAuth();
+
+  let itemid = null;
+  for (const key of itemKeys) {
+    const itemResp = await axiosInstance.post(ZABBIX_CONFIG.url, {
+      jsonrpc: '2.0', method: 'item.get',
+      params: { output: ['itemid'], hostids: hostid, filter: { key_: key }, limit: 1 },
+      auth: zabbixAuthToken, id: 12,
+    });
+    itemid = itemResp.data.result[0]?.itemid;
+    if (itemid) break;
+  }
+  if (!itemid) return [];
+
+  const now = Math.floor(Date.now() / 1000);
+  const dayAgo = now - 86400;
+  const historyResp = await axiosInstance.post(ZABBIX_CONFIG.url, {
+    jsonrpc: '2.0', method: 'history.get',
+    params: { output: 'extend', history: historyType, itemids: itemid, sortfield: 'clock', sortorder: 'ASC', time_from: dayAgo, time_till: now },
+    auth: zabbixAuthToken, id: 13,
+  });
+  return historyResp.data.result.map((h) => ({ time: Number(h.clock), value: valueFormatter(h.value) }));
+}
+
 // Rotas de histórico
 app.get('/api/history/:hostid/ram', async (req, res) => {
   try {
@@ -264,8 +290,14 @@ app.get('/api/history/:hostid/cpu', async (req, res) => {
   catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de CPU' }); }
 });
 app.get('/api/history/:hostid/disk', async (req, res) => {
-  try { res.json(await getZabbixHistory(req.params.hostid, 'vfs.fs.size[C:,pused]', 0)); }
-  catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de Disco' }); }
+  try {
+    // Tenta primeiro o template Linux (/) e depois Windows (C:)
+    const data = await getZabbixHistoryFirst(req.params.hostid, [
+      'vfs.fs.size[/,pused]',
+      'vfs.fs.size[C:,pused]'
+    ], 0, (v) => parseFloat(v));
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de Disco' }); }
 });
 
 // ===================================================================
