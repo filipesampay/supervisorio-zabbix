@@ -160,16 +160,25 @@ async function getHostMetrics(hostid, hostName) {
     await ensureAuth();
     if (name.includes('fortigate')) {
       metrics.deviceType = 'fortigate';
-      metrics.cpu = await getFirstPresent(hostid, ['fgSysCpuUsage','system.cpu.util']);
-      metrics.ram = await getFirstPresent(hostid, ['fgSysMemUsage','vm.memory.utilization']);
-      metrics.fwSessions = await getFirstPresent(hostid, ['fgSysSesCount','fortigate.sessions']);
+      // FortiGate por SNMP (template):
+      // CPU: system.cpu.util[fgSysCpuUsage.0]
+      // Memória %: vm.memory.util[memoryUsedPercentage.0]
+      // Sessões: net.ipv4.sessions[fgSysSesCount.0]
+      metrics.cpu = await getItemValue(hostid, 'system.cpu.util[fgSysCpuUsage.0]');
+      metrics.ram = await getItemValue(hostid, 'vm.memory.util[memoryUsedPercentage.0]');
+      metrics.fwSessions = await getItemValue(hostid, 'net.ipv4.sessions[fgSysSesCount.0]');
       metrics.ping = await getItemValue(hostid, 'icmppingsec');
       metrics.pingAlive = await getItemValue(hostid, 'icmpping');
     } else if (name.includes('router') || name.includes('switch') || name.includes('unifi')) {
       metrics.ping = await getItemValue(hostid, 'icmppingsec');
       metrics.pingAlive = await getItemValue(hostid, 'icmpping');
+      // Unifi AP template (UBQT UNIFI SNMP V1 HN):
+      // Tráfego: unifiIfRxBytes.1 / unifiIfTxBytes.1
+      // Channel utilization (opcional): unifiRadioCuTotal.1 (2.4G), unifiRadioCuTotal.2 (5G)
       metrics.netRx = await getItemValue(hostid, 'unifiIfRxBytes.1');
       metrics.netTx = await getItemValue(hostid, 'unifiIfTxBytes.1');
+      metrics.radio2Cu = await getItemValue(hostid, 'unifiRadioCuTotal.1');
+      metrics.radio5Cu = await getItemValue(hostid, 'unifiRadioCuTotal.2');
       metrics.deviceType = name.includes('unifi') ? 'unifi_switch' : 'network';
       metrics.poePower = await getFirstPresent(hostid, ['unifiPoePowerUsed','unifiPoEPower']);
       metrics.portsUp = await getFirstPresent(hostid, ['unifiActivePorts','unifiPortsUp']);
@@ -212,9 +221,12 @@ async function getHostMetrics(hostid, hostName) {
       metrics.deviceType = 'nas';
       metrics.ping = await getItemValue(hostid, 'icmppingsec');
       metrics.pingAlive = await getItemValue(hostid, 'icmpping');
-      metrics.cpu = await getFirstPresent(hostid, ['qnap.system.cpu.usage','system.cpu.util']);
-      metrics.ram = await getFirstPresent(hostid, ['qnap.system.memory.usage','vm.memory.utilization']);
-      metrics.storageUsedPct = await getFirstPresent(hostid, ['qnap.volume.used.percent','nas.volume.used.percent','vfs.fs.size[/,pused]']);
+      // O template SNMP QNAP não define CPU/Mem padrão de uso (%); mantemos fallbacks genéricos se existirem
+      metrics.cpu = await getFirstPresent(hostid, ['system.cpu.util']);
+      metrics.ram = await getFirstPresent(hostid, ['vm.memory.utilization']);
+      // QNAP define volume.freePercentage[{#VOLUMEINDEX}] / pool.freepercentage[{#POOLINDEX}].
+      // Sem índice, usamos fallback Linux pused quando disponível.
+      metrics.storageUsedPct = await getFirstPresent(hostid, ['vfs.fs.size[/,pused]']);
     } else {
       const [cpu, pingValue, pingAlive] = await Promise.all([
         getItemValue(hostid, 'system.cpu.util'),
