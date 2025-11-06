@@ -222,7 +222,11 @@ async function getHostMetrics(hostid, hostName) {
       ]);
     }
     const agentPing = await getItemValue(hostid, 'agent.ping');
-    metrics.agentStatus = agentPing > 0 ? 'online' : 'offline';
+    if (agentPing === null || agentPing === undefined) {
+      metrics.agentStatus = 'unknown';
+    } else {
+      metrics.agentStatus = Number(agentPing) > 0 ? 'online' : 'offline';
+    }
   } catch (err) {
     console.error(`Erro ao buscar métricas do host ${hostid}:`, (err && (err.message || err)));
   }
