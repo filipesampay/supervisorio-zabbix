@@ -110,6 +110,7 @@ async function getZabbixHosts() {
         selectInterfaces: ['ip','type'],
         selectGroups: ['name'],
         selectInventory: ['macaddress_a', 'macaddress_b'],
+        selectParentTemplates: ['name'],
       },
       auth: zabbixAuthToken, id: 2,
     });
@@ -407,7 +408,7 @@ async function processHostsInChunks(hosts, chunkSize = 10) {
       const status = metrics.pingAlive || metrics.agentStatus === 'online' ? 'online' : 'offline';
       const macFromInventory = extractFirstMac(host.inventory?.macaddress_a || host.inventory?.macaddress_b || '');
       const isSnmp = Array.isArray(host.interfaces) && host.interfaces.some((it) => Number(it.type) === 2);
-      return { id: parseInt(host.hostid), name: host.name, ip, group, status, ...metrics, macAddress: macFromInventory, isSnmp, lastUpdate: new Date().toISOString() };
+      let deviceType = metrics.deviceType || null; const tplNames = (host.parentTemplates || host.parenttemplates || []).map(t => (t.name || '').toLowerCase()); if (!deviceType && tplNames.length) { if (tplNames.some(n => n.includes('fortigate'))) deviceType = 'fortigate'; else if (tplNames.some(n => n.includes('qnap') || n.includes('nas'))) deviceType = 'nas'; else if (tplNames.some(n => n.includes('unifi') || n.includes('ubqt'))) deviceType = 'unifi_switch'; } return { id: parseInt(host.hostid), name: host.name, ip, group, status, deviceType, ...metrics, macAddress: macFromInventory, isSnmp, lastUpdate: new Date().toISOString() };
     });
     const settled = await Promise.allSettled(chunkPromises);
     settled.forEach((r) => { if (r.status === 'fulfilled') allResults.push(r.value); });
@@ -482,3 +483,4 @@ setInterval(async () => {
   console.log('Reautenticando no Zabbix (agendado)...');
   await authenticateZabbix();
 }, 3600000);
+
