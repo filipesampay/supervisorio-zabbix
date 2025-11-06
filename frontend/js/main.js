@@ -1,5 +1,5 @@
 // js/main.js
-import { fetchComputers } from './api.js';
+import { fetchComputers } from './api.js?v=2';
 import { renderComputers, renderBlockFilter, showLoading, initializeUiFunctions } from './ui.js';
 import { setupSearchBar, setupSortMenu, setupFilterBuilder } from './events.js';
 

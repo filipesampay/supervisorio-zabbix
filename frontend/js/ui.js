@@ -1,7 +1,7 @@
 // js/ui.js
 import { formatPing, formatBytes, formatUptime, formatMbps, getUsageClass, getCategory, shouldShowAgentBadge } from './utils.js';
 // ADICIONE AS NOVAS FUNÇÕES AO IMPORT
-import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory, sendWakeOnLan, fetchFwSessions, fetchNasStorageUsed, fetchUnifiPoePower, fetchUnifiPortsUp } from './api.js';
+import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory, sendWakeOnLan, fetchFwSessions, fetchNasStorageUsed, fetchUnifiPoePower, fetchUnifiPortsUp } from './api.js?v=2';
 
 // ... (cole aqui suas funções renderBlockFilter, renderComputers, applySort, createGroupHTML, e createComputerCard) ...
 
