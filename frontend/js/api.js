@@ -63,6 +63,38 @@ export async function fetchDiskHistory(computerId) {
     }
 }
 
+export async function fetchFwSessions(computerId) {
+  try {
+    const response = await fetch(`${API_URL}/history/${computerId}/fw_sessions`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (e) { console.error('Falha ao buscar sessões FW:', e); return null; }
+}
+
+export async function fetchNasStorageUsed(computerId) {
+  try {
+    const response = await fetch(`${API_URL}/history/${computerId}/storage_used`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (e) { console.error('Falha ao buscar storage NAS:', e); return null; }
+}
+
+export async function fetchUnifiPoePower(computerId) {
+  try {
+    const response = await fetch(`${API_URL}/history/${computerId}/poe_power`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (e) { console.error('Falha ao buscar PoE power:', e); return null; }
+}
+
+export async function fetchUnifiPortsUp(computerId) {
+  try {
+    const response = await fetch(`${API_URL}/history/${computerId}/ports_up`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return await response.json();
+  } catch (e) { console.error('Falha ao buscar portas UP:', e); return null; }
+}
+
 /**
  * Dispara Wake-on-LAN para um MAC informado.
  */

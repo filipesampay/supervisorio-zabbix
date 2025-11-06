@@ -158,11 +158,21 @@ async function getHostMetrics(hostid, hostName) {
   const metrics = { cpu: null, ram: null, ping: null, pingAlive: null, pingLoss: null, netRx: null, netTx: null, ink: null, agentStatus: null, uptimeSec: null, totalRam: null, totalDisk: null };
   try {
     await ensureAuth();
-    if (name.includes('router') || name.includes('switch') || name.includes('unifi')) {
+    if (name.includes('fortigate')) {
+      metrics.deviceType = 'fortigate';
+      metrics.cpu = await getFirstPresent(hostid, ['fgSysCpuUsage','system.cpu.util']);
+      metrics.ram = await getFirstPresent(hostid, ['fgSysMemUsage','vm.memory.utilization']);
+      metrics.fwSessions = await getFirstPresent(hostid, ['fgSysSesCount','fortigate.sessions']);
+      metrics.ping = await getItemValue(hostid, 'icmppingsec');
+      metrics.pingAlive = await getItemValue(hostid, 'icmpping');
+    } else if (name.includes('router') || name.includes('switch') || name.includes('unifi')) {
       metrics.ping = await getItemValue(hostid, 'icmppingsec');
       metrics.pingAlive = await getItemValue(hostid, 'icmpping');
       metrics.netRx = await getItemValue(hostid, 'unifiIfRxBytes.1');
       metrics.netTx = await getItemValue(hostid, 'unifiIfTxBytes.1');
+      metrics.deviceType = name.includes('unifi') ? 'unifi_switch' : 'network';
+      metrics.poePower = await getFirstPresent(hostid, ['unifiPoePowerUsed','unifiPoEPower']);
+      metrics.portsUp = await getFirstPresent(hostid, ['unifiActivePorts','unifiPortsUp']);
     } else if (name.includes('cam') || name.includes('camera') || name.includes('ezviz') || name.includes('hikvision')) {
       metrics.ping = await getItemValue(hostid, 'icmppingsec');
       metrics.pingAlive = await getItemValue(hostid, 'icmpping');
@@ -198,6 +208,13 @@ async function getHostMetrics(hostid, hostName) {
         bBlack = pBlack; bCyan = pCyan; bMagenta = pMagenta; bYellow = pYellow;
       }
       metrics.ink = { black: bBlack, cyan: bCyan, magenta: bMagenta, yellow: bYellow };
+    } else if (name.includes('qnap') || name.includes(' nas') || name.includes('synology')) {
+      metrics.deviceType = 'nas';
+      metrics.ping = await getItemValue(hostid, 'icmppingsec');
+      metrics.pingAlive = await getItemValue(hostid, 'icmpping');
+      metrics.cpu = await getFirstPresent(hostid, ['qnap.system.cpu.usage','system.cpu.util']);
+      metrics.ram = await getFirstPresent(hostid, ['qnap.system.memory.usage','vm.memory.utilization']);
+      metrics.storageUsedPct = await getFirstPresent(hostid, ['qnap.volume.used.percent','nas.volume.used.percent','vfs.fs.size[/,pused]']);
     } else {
       const [cpu, pingValue, pingAlive] = await Promise.all([
         getItemValue(hostid, 'system.cpu.util'),
@@ -330,6 +347,38 @@ app.get('/api/history/:hostid/disk', async (req, res) => {
     ], 0, (v) => parseFloat(v));
     res.json(data);
   } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de Disco' }); }
+});
+
+// Fortigate: histórico de sessões
+app.get('/api/history/:hostid/fw_sessions', async (req, res) => {
+  try {
+    const data = await getZabbixHistoryFirst(req.params.hostid, ['fgSysSesCount','fortigate.sessions'], 3, (v) => parseFloat(v));
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de sessões' }); }
+});
+
+// NAS: histórico de uso de armazenamento (%)
+app.get('/api/history/:hostid/storage_used', async (req, res) => {
+  try {
+    const data = await getZabbixHistoryFirst(req.params.hostid, ['qnap.volume.used.percent','nas.volume.used.percent','vfs.fs.size[/,pused]'], 0, (v) => parseFloat(v));
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de armazenamento' }); }
+});
+
+// Unifi: histórico de potência PoE
+app.get('/api/history/:hostid/poe_power', async (req, res) => {
+  try {
+    const data = await getZabbixHistoryFirst(req.params.hostid, ['unifiPoePowerUsed','unifiPoEPower'], 0, (v) => parseFloat(v));
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de PoE' }); }
+});
+
+// Unifi: histórico de portas ativas
+app.get('/api/history/:hostid/ports_up', async (req, res) => {
+  try {
+    const data = await getZabbixHistoryFirst(req.params.hostid, ['unifiActivePorts','unifiPortsUp'], 3, (v) => parseFloat(v));
+    res.json(data);
+  } catch (err) { res.status(500).json({ error: 'Erro ao buscar histórico de portas' }); }
 });
 
 // ===================================================================

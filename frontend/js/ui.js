@@ -1,7 +1,7 @@
 // js/ui.js
 import { formatPing, formatBytes, formatUptime, formatMbps, getUsageClass, getCategory, shouldShowAgentBadge } from './utils.js';
 // ADICIONE AS NOVAS FUNÇÕES AO IMPORT
-import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory, sendWakeOnLan } from './api.js';
+import { fetchRamHistory, fetchCpuHistory, fetchDiskHistory, sendWakeOnLan, fetchFwSessions, fetchNasStorageUsed, fetchUnifiPoePower, fetchUnifiPortsUp } from './api.js';
 
 // ... (cole aqui suas funções renderBlockFilter, renderComputers, applySort, createGroupHTML, e createComputerCard) ...
 
@@ -279,6 +279,48 @@ async function toggleExpand(id, el, allComputers) {
     document.body.appendChild(overlay);
     requestAnimationFrame(() => clone.classList.add('show'));
     try { localStorage.setItem('expandedHostId', String(id)); } catch (_) {}
+
+    // Gráficos por tipo de dispositivo (Fortigate, NAS, UniFi) antes do fluxo padrão
+    try {
+        const chartsWrapperPre = clone.querySelector('#charts-wrapper');
+        if (chartsWrapperPre) {
+            const devTypePre = pc.deviceType || getCategory(pc);
+            if (devTypePre === 'fortigate') {
+                chartsWrapperPre.innerHTML = 'Carregando graficos...';
+                const [fwSess, cpuH, ramH] = await Promise.all([
+                    fetchFwSessions(pc.id), fetchCpuHistory(pc.id), fetchRamHistory(pc.id)
+                ]);
+                chartsWrapperPre.innerHTML = '';
+                createHistoryChart(chartsWrapperPre, 'fwSessChart', 'Sessoes Ativas (24h)', 'Sessoes', fwSess, v => `${v.toFixed(0)}`, '#22c55e');
+                createHistoryChart(chartsWrapperPre, 'cpuChart', 'CPU (24h)', 'CPU', cpuH, v => `${v.toFixed(1)} %`, '#e91e63');
+                createHistoryChart(chartsWrapperPre, 'ramChart', 'Memoria (24h)', 'RAM', ramH, v => `${v.toFixed(1)} %`, '#00bcd4');
+                return;
+            }
+            if (devTypePre === 'nas') {
+                chartsWrapperPre.innerHTML = 'Carregando graficos...';
+                const [stor, cpuH, ramH] = await Promise.all([
+                    fetchNasStorageUsed(pc.id), fetchCpuHistory(pc.id), fetchRamHistory(pc.id)
+                ]);
+                chartsWrapperPre.innerHTML = '';
+                createHistoryChart(chartsWrapperPre, 'storChart', 'Uso de Armazenamento (24h)', 'Uso', stor, v => `${v.toFixed(1)} %`, '#f59e0b');
+                createHistoryChart(chartsWrapperPre, 'cpuChart', 'CPU (24h)', 'CPU', cpuH, v => `${v.toFixed(1)} %`, '#e91e63');
+                createHistoryChart(chartsWrapperPre, 'ramChart', 'Memoria (24h)', 'RAM', ramH, v => `${v.toFixed(1)} %`, '#00bcd4');
+                return;
+            }
+            if (devTypePre === 'unifi_switch' || devTypePre === 'network') {
+                chartsWrapperPre.innerHTML = 'Carregando graficos...';
+                const [poe, ports] = await Promise.all([
+                    fetchUnifiPoePower(pc.id), fetchUnifiPortsUp(pc.id)
+                ]);
+                chartsWrapperPre.innerHTML = '';
+                createHistoryChart(chartsWrapperPre, 'poeChart', 'Potencia PoE (24h)', 'PoE', poe, v => `${v.toFixed(1)} W`, '#10b981');
+                createHistoryChart(chartsWrapperPre, 'portsChart', 'Portas Ativas (24h)', 'Portas', ports, v => `${v.toFixed(0)}`, '#6366f1');
+                return;
+            }
+        }
+    } catch (e) {
+        // Continua para o fluxo padrão
+    }
 
     // Para de executar se não for um computador
     if (getCategory(pc) !== 'computer') return;
