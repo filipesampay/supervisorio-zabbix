@@ -117,7 +117,15 @@ export function renderComputers(computers, state) {
 // =======================================================
 
 function applySort(list, sort) {
-  if (!sort || !sort.field) return list;
+  if (!sort || !sort.field) {
+    // Ordenação padrão: online primeiro, depois por nome ASC
+    return list.sort((a, b) => {
+      const sa = (a.status === 'offline') ? 1 : 0;
+      const sb = (b.status === 'offline') ? 1 : 0;
+      if (sa !== sb) return sa - sb; // offline vão para o fim
+      return String(a.name || '').localeCompare(String(b.name || ''));
+    });
+  }
   const dir = sort.dir === 'desc' ? -1 : 1;
   list.sort((a, b) => {
     const va = a[sort.field];
@@ -142,6 +150,7 @@ function createComputerCard(pc, pingResults) {
 
     const pingBadge = pc.pingAlive ? `<span class="status-badge online">ONLINE</span>` : `<span class="status-badge offline">OFFLINE</span>`;
     const agentBadge = (shouldShowAgentBadge(pc) && pc.agentStatus) ? (pc.agentStatus === 'online' ? `<span class="status-badge agent-online">AGENTE ON</span>` : pc.agentStatus === 'offline' ? `<span class="status-badge agent-offline">AGENTE OFF</span>` : '') : '';
+    const snmpBadge = pc.isSnmp ? `<span class="status-badge snmp">SNMP</span>` : '';
 
     const macHtml = pc.macAddress ? `<span class=\"mac-label\">MAC: ${pc.macAddress}</span>` : '<span class=\"mac-label\">MAC: -</span>';
     const wolBtn = pc.macAddress
@@ -152,7 +161,7 @@ function createComputerCard(pc, pingResults) {
         <div class="computer-card" id="host-card-${pc.id}" data-cat="${cat}" onclick="toggleExpand(${pc.id}, this)">
             <div class="card-header">
                 <h3>${pc.name}</h3>
-                <div class="status-area">${pingBadge}${agentBadge}</div>
+                <div class="status-area">${pingBadge}${agentBadge}${snmpBadge}</div>
             </div>
             <div class="metrics">
                 ${cat === 'computer' ? `

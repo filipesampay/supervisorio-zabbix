@@ -601,6 +601,12 @@ body {
   border: 1px solid rgba(239,68,68,0.35);
 }
 
+.status-badge.snmp {
+  background: rgba(34,197,94,0.25);
+  color: #22c55e;
+  border: 1px solid rgba(34,197,94,0.35);
+}
+
 .status-badge.ink-low {
   background-color: #b91c1c;
   color: #fff;

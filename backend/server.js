@@ -107,7 +107,7 @@ async function getZabbixHosts() {
       jsonrpc: '2.0', method: 'host.get',
       params: {
         output: ['hostid', 'host', 'name', 'status'],
-        selectInterfaces: ['ip'],
+        selectInterfaces: ['ip','type'],
         selectGroups: ['name'],
         selectInventory: ['macaddress_a', 'macaddress_b'],
       },
@@ -345,7 +345,8 @@ async function processHostsInChunks(hosts, chunkSize = 10) {
       const group = host.groups[0]?.name || 'Sem Grupo';
       const status = metrics.pingAlive || metrics.agentStatus === 'online' ? 'online' : 'offline';
       const macFromInventory = extractFirstMac(host.inventory?.macaddress_a || host.inventory?.macaddress_b || '');
-      return { id: parseInt(host.hostid), name: host.name, ip, group, status, ...metrics, macAddress: macFromInventory, lastUpdate: new Date().toISOString() };
+      const isSnmp = Array.isArray(host.interfaces) && host.interfaces.some((it) => Number(it.type) === 2);
+      return { id: parseInt(host.hostid), name: host.name, ip, group, status, ...metrics, macAddress: macFromInventory, isSnmp, lastUpdate: new Date().toISOString() };
     });
     const settled = await Promise.allSettled(chunkPromises);
     settled.forEach((r) => { if (r.status === 'fulfilled') allResults.push(r.value); });
@@ -375,7 +376,8 @@ app.get('/api/host/:id', async (req, res) => {
     const group = host.groups[0]?.name || 'Sem Grupo';
     const status = metrics.pingAlive || metrics.agentStatus === 'online' ? 'online' : 'offline';
     const macFromInventory = extractFirstMac(host.inventory?.macaddress_a || host.inventory?.macaddress_b || '');
-    res.json({ id: parseInt(host.hostid), name: host.name, ip, group, status, ...metrics, macAddress: macFromInventory });
+    const isSnmp = Array.isArray(host.interfaces) && host.interfaces.some((it) => Number(it.type) === 2);
+    res.json({ id: parseInt(host.hostid), name: host.name, ip, group, status, ...metrics, macAddress: macFromInventory, isSnmp });
   } catch (err) {
     res.status(500).json({ error: 'Erro interno ao buscar host' });
   }
